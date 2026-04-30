@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Glitch Renderer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            cursor: crosshair;
+        }
+
+        /* ── SPLASH / ENTRY SCREEN ─────────────────────── */
+        #splash {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            transition: opacity 0.9s ease;
+        }
+
+        #splash.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .splash-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .splash-eyebrow {
+            color: #2a2a2a;
+            font-size: 9px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+        }
+
+        .splash-divider-v {
+            width: 1px;
+            height: 36px;
+            background: linear-gradient(to bottom, transparent, #c77);
+        }
+
+        .splash-title {
+            color: #c77;
+            font-size: 13px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+        }
+
+        .splash-hr {
+            width: 56px;
+            height: 1px;
+            background: #1a1a1a;
+        }
+
+        .splash-sub {
+            color: #333;
+            font-size: 9px;
+            letter-spacing: 2px;
+            text-align: center;
+            line-height: 2;
+            max-width: 220px;
+        }
+
+        /* Progress bar inside splash */
+        .splash-prog-wrap {
+            width: 160px;
+            height: 1px;
+            background: #111;
+            margin-top: 4px;
+        }
+
+        .splash-prog-bar {
+            height: 1px;
+            background: #c77;
+            width: 0%;
+            transition: width 0.35s ease;
+        }
+
+        .splash-prog-label {
+            color: #1f1f1f;
+            font-size: 9px;
+            letter-spacing: 3px;
+            text-align: center;
+            margin-top: 8px;
+            transition: color 0.4s;
+        }
+
+        /* Enter button */
+        #enter-btn {
+            margin-top: 20px;
+            background: transparent;
+            border: 1px solid #1e1e1e;
+            color: #1e1e1e;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            font-size: 10px;
+            letter-spacing: 5px;
+            padding: 14px 40px;
+            cursor: default;
+            text-transform: uppercase;
+            pointer-events: none;
+            transition: border-color 0.5s, color 0.5s, background 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #enter-btn.ready {
+            border-color: #c77;
+            color: #c77;
+            cursor: pointer;
+            pointer-events: all;
+        }
+
+        #enter-btn.ready:hover {
+            background: rgba(204, 119, 119, 0.07);
+        }
+
+        #enter-btn.ready:active {
+            background: rgba(204, 119, 119, 0.15);
+        }
+
+        /* scanline on splash for atmosphere */
+        #splash-scan {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: repeating-linear-gradient(0deg,
+                    transparent, transparent 2px,
+                    rgba(0, 0, 0, 0.12) 2px, rgba(0, 0, 0, 0.12) 4px);
+            z-index: 1;
+        }
+
+        .splash-inner {
+            z-index: 2;
+            position: relative;
+        }
+
+        /* ── MAIN APP (hidden until entry) ───────────────── */
+        #app {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.8s ease 0.2s;
+        }
+
+        #app.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        #canvas-wrap {
+            position: fixed;
+            inset: 0;
+            background: #000;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* HUD */
+        #hud-top {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 20;
+            pointer-events: none;
+        }
+
+        #fps {
+            color: #222;
+            font-size: 9px;
+            letter-spacing: 3px;
+        }
+
+        #mode-label {
+            color: #c77;
+            font-size: 9px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        #img-counter {
+            color: #222;
+            font-size: 9px;
+            letter-spacing: 3px;
+        }
+
+        /* Controls bar */
+        #controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 42px;
+            display: flex;
+            gap: 0;
+            align-items: stretch;
+            z-index: 20;
+            border-top: 1px solid #111;
+            background: rgba(0, 0, 0, 0.85);
+        }
+
+        .btn {
+            background: transparent;
+            border: none;
+            border-right: 1px solid #111;
+            color: #333;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            font-size: 9px;
+            letter-spacing: 2px;
+            padding: 0 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-transform: uppercase;
+            flex-shrink: 0;
+        }
+
+        .btn:hover {
+            color: #e9b;
+            background: #0a0a0a;
+        }
+
+        .btn.active {
+            color: #c77;
+            border-bottom: 1px solid #c77;
+        }
+
+        .btn:last-child {
+            border-right: none;
+            margin-left: auto;
+        }
+
+        /* Image dots */
+        #img-dots {
+            position: fixed;
+            bottom: 52px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            z-index: 20;
+        }
+
+        .img-dot {
+            width: 4px;
+            height: 4px;
+            background: #222;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.3s;
+        }
+
+        .img-dot.active {
+            background: #c77;
+            transform: scaleX(3);
+        }
+
+        /* Audio indicator */
+        #audio-icon {
+            position: fixed;
+            top: 12px;
+            right: 52px;
+            color: #222;
+            font-size: 9px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            z-index: 21;
+            transition: color 0.2s;
+            pointer-events: all;
+        }
+
+        #audio-icon:hover {
+            color: #c77;
+        }
+
+        #audio-icon.on {
+            color: #444;
+        }
+
+        /* Transition vignette */
+        #vignette {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 15;
+            background: radial-gradient(ellipse at center, transparent 40%, #000 100%);
+        }
+
+        /* Scanline overlay */
+        #scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 14;
+            background: repeating-linear-gradient(0deg,
+                    transparent, transparent 2px,
+                    rgba(0, 0, 0, 0.08) 2px, rgba(0, 0, 0, 0.08) 4px);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ═══════════════════════════════════
+         SPLASH / ENTRY SCREEN
+         Requires a click → unlocks audio autoplay
+    ═══════════════════════════════════ -->
+    <div id="splash">
+        <div id="splash-scan"></div>
+        <div class="splash-inner">
+            <div class="splash-prog-wrap">
+                <div class="splash-prog-bar" id="splash-prog-bar"></div>
+            </div>
+            <div class="splash-prog-label" id="splash-prog-label">0 / 0</div>
+
+            <button id="enter-btn">▶ &nbsp; Enter</button>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════
+         MAIN APP
+    ═══════════════════════════════════ -->
+    <div id="app">
+        <div id="canvas-wrap">
+            <canvas id="c"></canvas>
+        </div>
+
+        <div id="vignette"></div>
+        <div id="scanlines"></div>
+
+        <div id="hud-top">
+            <div id="fps">-- fps</div>
+            <div id="mode-label">ASCII</div>
+            <div id="img-counter">1 / 1</div>
+        </div>
+
+        <div id="img-dots"></div>
+
+        <span id="audio-icon" title="Toggle audio">♪ ON</span>
+    </div>
+
+    <script>
+        /* ═══════════════════════════════════════════════
+           HARD-CODED PATHS — edit these arrays
+        ═══════════════════════════════════════════════ */
+        const IMAGE_PATHS = [
+            '/images/photo1.png',
+            '/images/photo2.png',
+            '/images/photo3.png',
+            '/images/photo4.png',
+        ];
+
+        const AUDIO_PATH = '/audio/output.mp3';
+
+        /* ═══════════════════════════════════════════════
+           PLACEHOLDER GENERATOR
+        ═══════════════════════════════════════════════ */
+        function makePlaceholder(index) {
+            const w = 720, h = 480;
+            const off = document.createElement('canvas');
+            off.width = w; off.height = h;
+            const ctx = off.getContext('2d');
+            const palettes = [
+                ['#ff6b6b', '#feca57', '#ff9ff3', '#54a0ff'],
+                ['#5f27cd', '#00d2d3', '#ff9f43', '#48dbfb'],
+                ['#1dd1a1', '#ff6b6b', '#ffeaa7', '#74b9ff'],
+                ['#e84393', '#6c5ce7', '#00cec9', '#fdcb6e'],
+            ];
+            const p = palettes[index % palettes.length];
+            const grad = ctx.createRadialGradient(w * 0.3, h * 0.3, 20, w * 0.7, h * 0.7, w * 0.8);
+            grad.addColorStop(0, p[0]);
+            grad.addColorStop(0.35, p[1]);
+            grad.addColorStop(0.65, p[2]);
+            grad.addColorStop(1, p[3]);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, w, h);
+            for (let i = 0; i < 8; i++) {
+                ctx.save();
+                ctx.globalAlpha = 0.15 + Math.random() * 0.2;
+                ctx.fillStyle = p[i % p.length];
+                ctx.beginPath();
+                ctx.arc(Math.random() * w, Math.random() * h, 40 + Math.random() * 180, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, h / 2 - 20, w, 40);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('PLACEHOLDER IMAGE ' + (index + 1) + ' — add real path to IMAGE_PATHS[]', w / 2, h / 2 + 5);
+            return off.toDataURL();
+        }
+
+        /* ═══════════════════════════════════════════════
+           LOADING STATE
+           Tracks: images loaded + user clicked Enter
+        ═══════════════════════════════════════════════ */
+        let totalAssets = IMAGE_PATHS.length;
+        let loadedAssets = 0;
+        let assetsReady = false;
+        let userEntered = false;
+
+        function onAssetLoaded() {
+            loadedAssets++;
+            const pct = Math.round(loadedAssets / totalAssets * 100);
+            document.getElementById('splash-prog-bar').style.width = pct + '%';
+            document.getElementById('splash-prog-label').textContent = loadedAssets + ' / ' + totalAssets;
+            if (loadedAssets >= totalAssets) {
+                assetsReady = true;
+                enableEnterBtn();
+            }
+        }
+
+        function enableEnterBtn() {
+            const btn = document.getElementById('enter-btn');
+            btn.classList.add('ready');
+            document.getElementById('splash-prog-label').style.color = '#555';
+            document.getElementById('splash-prog-label').textContent = 'Ready';
+        }
+
+        document.getElementById('enter-btn').addEventListener('click', () => {
+            if (!assetsReady) return; // button is visually disabled, but guard anyway
+            userEntered = true;
+            enterApp();
+        });
+
+        function enterApp() {
+            // Start audio — this click IS the user gesture, so autoplay is allowed
+            startAudio();
+
+            // Fade out splash
+            const splash = document.getElementById('splash');
+            splash.classList.add('fade-out');
+            setTimeout(() => { splash.style.display = 'none'; }, 950);
+
+            // Reveal app
+            document.getElementById('app').classList.add('visible');
+
+            // Kick off render loop
+            updateCounter();
+            // updateModeUI();
+            requestAnimationFrame(loop);
+        }
+
+        /* ═══════════════════════════════════════════════
+           CORE STATE
+        ═══════════════════════════════════════════════ */
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*!?><'.split('');
+        const modeNames = ['ASCII', 'DOTS', 'PIXELS'];
+
+        let canvas, ctx2d;
+        let canvasW = 0, canvasH = 0;
+
+        let images = [];
+        let currentIdx = 0;
+        let nextIdx = 1;
+
+        let imgTransT = 1.0;
+        let inTransition = false;
+        let autoImgTimer = 0;
+        const IMG_INTERVAL = 5.0;
+
+        let renderMode = 0, prevMode = 0, modeT = 1;
+        let grid = 6, gridTarget = 6;
+        let autoMode = true, autoTimer = 0;
+        const GRID_MIN = 5, GRID_MAX = 18;
+        let densDir = 1;
+
+        let glitchActive = false, glitchSlices = [], glitchTimer = 2;
+        let mInfX = 0, mInfY = 0, mouseX = 0, mouseY = 0;
+
+        let lastTime = performance.now(), frameCount = 0, fpsTimer = 0;
+        let raf = null;
+        let globalTime = 0;
+
+        let audio = null;
+        let audioEnabled = true; // starts ON — user clicked Enter so autoplay is allowed
+
+        /* ═══════════════════════════════════════════════
+           SETUP
+        ═══════════════════════════════════════════════ */
+        function setup() {
+            canvas = document.getElementById('c');
+            ctx2d = canvas.getContext('2d');
+            resize();
+            window.addEventListener('resize', resize);
+            canvas.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+            canvas.addEventListener('click', () => triggerGlitch());
+            loadAllImages();
+            buildDots();
+        }
+
+        function resize() {
+            canvasW = canvas.width = window.innerWidth;
+            canvasH = canvas.height = window.innerHeight;
+        }
+
+        /* ═══════════════════════════════════════════════
+           IMAGE LOADING
+        ═══════════════════════════════════════════════ */
+        function loadAllImages() {
+            document.getElementById('splash-prog-label').textContent = '0 / ' + totalAssets;
+
+            IMAGE_PATHS.forEach((src, idx) => {
+                images[idx] = null;
+                const tryLoad = (source) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const maxS = 720;
+                        let w = img.naturalWidth, h = img.naturalHeight;
+                        const r = Math.min(maxS / w, maxS / h);
+                        if (w > maxS || h > maxS) { w = Math.floor(w * r); h = Math.floor(h * r); }
+                        const off = document.createElement('canvas');
+                        off.width = w; off.height = h;
+                        const octx = off.getContext('2d', { willReadFrequently: true });
+                        octx.drawImage(img, 0, 0, w, h);
+                        images[idx] = { data: octx.getImageData(0, 0, w, h).data, w, h };
+                        onAssetLoaded();
+                    };
+                    img.onerror = () => {
+                        console.warn('Could not load image:', source, '— using placeholder');
+                        const placeholderSrc = makePlaceholder(idx);
+                        if (source !== placeholderSrc) {
+                            const pImg = new Image();
+                            pImg.onload = () => {
+                                const w = pImg.naturalWidth, h = pImg.naturalHeight;
+                                const off = document.createElement('canvas');
+                                off.width = w; off.height = h;
+                                const octx = off.getContext('2d', { willReadFrequently: true });
+                                octx.drawImage(pImg, 0, 0, w, h);
+                                images[idx] = { data: octx.getImageData(0, 0, w, h).data, w, h };
+                                onAssetLoaded();
+                            };
+                            pImg.src = placeholderSrc;
+                        }
+                    };
+                    img.src = source;
+                };
+                tryLoad(src);
+            });
+        }
+
+        /* ═══════════════════════════════════════════════
+           AUDIO
+           Audio object is created up front but only
+           .play() is called after the user clicks Enter
+           — that click counts as the required gesture.
+        ═══════════════════════════════════════════════ */
+        function startAudio() {
+            audio = new Audio(AUDIO_PATH);
+            audio.loop = true;
+            audio.volume = 0.45;
+            audio.onerror = () => {
+                console.warn('Audio not found at', AUDIO_PATH);
+                document.getElementById('audio-icon').textContent = '♪ ERR';
+            };
+            audio.play().catch(err => {
+                console.warn('Audio play failed:', err);
+            });
+            document.getElementById('audio-icon').textContent = '♪ ON';
+            document.getElementById('audio-icon').classList.add('on');
+        }
+
+        function toggleAudio() {
+            if (!audio) return;
+            audioEnabled = !audioEnabled;
+            const icon = document.getElementById('audio-icon');
+            if (audioEnabled) {
+                audio.play().catch(() => { });
+                icon.textContent = '♪ ON';
+                icon.classList.add('on');
+            } else {
+                audio.pause();
+                icon.textContent = '♪ OFF';
+                icon.classList.remove('on');
+            }
+        }
+
+        /* ═══════════════════════════════════════════════
+           IMAGE DOTS NAV
+        ═══════════════════════════════════════════════ */
+        function buildDots() {
+            const wrap = document.getElementById('img-dots');
+            wrap.innerHTML = '';
+            IMAGE_PATHS.forEach((_, i) => {
+                const d = document.createElement('div');
+                d.className = 'img-dot' + (i === 0 ? ' active' : '');
+                d.addEventListener('click', () => goToImage(i));
+                wrap.appendChild(d);
+            });
+        }
+
+        function updateDots() {
+            document.querySelectorAll('.img-dot').forEach((d, i) =>
+                d.classList.toggle('active', i === currentIdx));
+        }
+
+        function updateCounter() {
+            document.getElementById('img-counter').textContent =
+                (currentIdx + 1) + ' / ' + IMAGE_PATHS.length;
+        }
+
+        /* ═══════════════════════════════════════════════
+           IMAGE TRANSITION
+        ═══════════════════════════════════════════════ */
+        function goToImage(idx) {
+            if (idx === currentIdx || inTransition) return;
+            nextIdx = idx;
+            imgTransT = 0;
+            inTransition = true;
+            autoImgTimer = 0;
+            if (Math.random() < 0.6) triggerGlitch(0.5 + Math.random() * 0.5);
+            if (autoMode) {
+                prevMode = renderMode;
+                renderMode = Math.floor(Math.random() * 3);
+                modeT = 0;
+                // updateModeUI();
+            }
+        }
+
+        function nextImage() { goToImage((currentIdx + 1) % IMAGE_PATHS.length); }
+        function prevImage() { goToImage((currentIdx - 1 + IMAGE_PATHS.length) % IMAGE_PATHS.length); }
+
+        /* ═══════════════════════════════════════════════
+           GLITCH
+        ═══════════════════════════════════════════════ */
+        function triggerGlitch(intensity) {
+            intensity = intensity || (0.4 + Math.random() * 0.6);
+            glitchActive = true;
+            glitchSlices = [];
+            const img = images[currentIdx]; if (!img) return;
+            const scaleF = Math.min(canvasW / img.w, canvasH / img.h) * 0.9;
+            const rW = img.w * scaleF, rH = img.h * scaleF;
+            const ox = (canvasW - rW) / 2, oy = (canvasH - rH) / 2;
+            const n = 3 + Math.floor(Math.random() * 9);
+            for (let i = 0; i < n; i++) {
+                const sy = oy + Math.random() * rH;
+                const sh = Math.min(2 + Math.random() * rH * 0.09, oy + rH - sy);
+                glitchSlices.push({
+                    y: sy, h: sh, fx: ox, fw: rW,
+                    offset: (Math.random() - 0.5) * 160 * intensity,
+                    colorShift: Math.random() < 0.4,
+                    life: 0.08 + Math.random() * 0.28
+                });
+            }
+        }
+
+        function updateGlitch(dt) {
+            if (!glitchActive) return;
+            let done = true;
+            for (const s of glitchSlices) {
+                s.life -= dt;
+                if (s.life > 0) done = false;
+                else s.offset *= 0.65;
+                if (Math.abs(s.offset) > 0.3) done = false;
+            }
+            if (done) { glitchActive = false; glitchSlices = []; }
+        }
+
+        function drawGlitch() {
+            if (!glitchActive) return;
+            for (const s of glitchSlices) {
+                if (Math.abs(s.offset) < 0.4) continue;
+                const sx = Math.floor(s.fx), sy = Math.floor(s.y);
+                const sw = Math.floor(s.fw), sh = Math.max(1, Math.floor(s.h));
+                if (sw < 1) continue;
+                if (s.colorShift) {
+                    ctx2d.save();
+                    ctx2d.globalAlpha = 0.7;
+                    ctx2d.globalCompositeOperation = 'lighter';
+                    ctx2d.drawImage(canvas, sx, sy, sw, sh, sx + s.offset * 1.5, sy, sw, sh);
+                    ctx2d.globalAlpha = 0.45;
+                    ctx2d.drawImage(canvas, sx, sy, sw, sh, sx - s.offset, sy, sw, sh);
+                    ctx2d.restore();
+                } else {
+                    ctx2d.drawImage(canvas, sx, sy, sw, sh, sx + s.offset, sy, sw, sh);
+                }
+            }
+        }
+
+        /* ═══════════════════════════════════════════════
+           MAIN LOOP
+        ═══════════════════════════════════════════════ */
+        function loop(now) {
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+            frameCount++;
+            fpsTimer += dt;
+            if (fpsTimer > 0.5) {
+                document.getElementById('fps').textContent = Math.round(frameCount / fpsTimer) + ' fps';
+                frameCount = 0; fpsTimer = 0;
+            }
+
+            if (!images[currentIdx]) { raf = requestAnimationFrame(loop); return; }
+
+            mInfX += ((mouseX - canvasW / 2) * 0.06 - mInfX) * 0.04;
+            mInfY += ((mouseY - canvasH / 2) * 0.06 - mInfY) * 0.04;
+
+            if (autoMode) {
+                autoImgTimer += dt;
+                if (autoImgTimer >= IMG_INTERVAL && !inTransition) {
+                    autoImgTimer = 0;
+                    nextImage();
+                }
+            }
+
+            if (inTransition) {
+                imgTransT += dt * 1.8;
+                if (imgTransT >= 1.0) {
+                    imgTransT = 1.0;
+                    inTransition = false;
+                    currentIdx = nextIdx;
+                    updateDots();
+                    updateCounter();
+                }
+            }
+
+            if (autoMode) {
+                autoTimer += dt;
+                if (autoTimer > 1.6) {
+                    autoTimer = 0;
+                    prevMode = renderMode;
+                    renderMode = (renderMode + 1) % 3;
+                    modeT = 0;
+                    densDir === 1 ? (gridTarget = GRID_MAX, densDir = -1) : (gridTarget = GRID_MIN, densDir = 1);
+                    if (!inTransition && Math.random() < 0.25) triggerGlitch();
+                    // updateModeUI();
+                }
+                glitchTimer -= dt;
+                if (glitchTimer <= 0) {
+                    glitchTimer = 2 + Math.random() * 4;
+                    if (Math.random() < 0.2) triggerGlitch(0.3 + Math.random() * 0.4);
+                }
+            }
+
+            globalTime += dt;
+            grid += (gridTarget - grid) * 0.09;
+            modeT = Math.min(1, modeT + dt * 5);
+            updateGlitch(dt);
+
+            ctx2d.fillStyle = '#000';
+            ctx2d.fillRect(0, 0, canvasW, canvasH);
+            renderFrame();
+            drawGlitch();
+
+            raf = requestAnimationFrame(loop);
+        }
+
+        /* ═══════════════════════════════════════════════
+           RENDER
+        ═══════════════════════════════════════════════ */
+        function renderFrame() {
+            const g = Math.max(4, Math.round(grid));
+            const halfG = g * 0.5;
+            const asciiSz = g * 1.1;
+            const T = globalTime;
+
+            const imgA = images[currentIdx];
+            const imgB = inTransition ? images[nextIdx] : null;
+            if (!imgA) return;
+
+            const scaleA = Math.min(canvasW / imgA.w, canvasH / imgA.h) * 0.9;
+            const rwA = imgA.w * scaleA, rhA = imgA.h * scaleA;
+            const oxA = Math.floor((canvasW - rwA) / 2 + mInfX);
+            const oyA = Math.floor((canvasH - rhA) / 2 + mInfY);
+            const invA = 1 / scaleA;
+
+            let scaleB = scaleA, rwB = rwA, rhB = rhA, oxB = oxA, oyB = oyA, invB = invA;
+            if (imgB) {
+                scaleB = Math.min(canvasW / imgB.w, canvasH / imgB.h) * 0.9;
+                rwB = imgB.w * scaleB; rhB = imgB.h * scaleB;
+                oxB = Math.floor((canvasW - rwB) / 2 + mInfX);
+                oyB = Math.floor((canvasH - rhB) / 2 + mInfY);
+                invB = 1 / scaleB;
+            }
+
+            const yStart = Math.max(0, Math.floor(Math.min(oyA, oyB || oyA) / g) * g);
+            const yEnd = Math.min(canvasH, Math.max(oyA + rhA, oyB ? oyB + rhB : oyA + rhA));
+            const xStart = Math.max(0, Math.floor(Math.min(oxA, oxB || oxA) / g) * g);
+            const xEnd = Math.min(canvasW, Math.max(oxA + rwA, oxB ? oxB + rwB : oxA + rwA));
+
+            const curM = renderMode, prevM = prevMode, mt = modeT;
+            const mDone = mt >= 0.99;
+            let lastFont = '';
+            ctx2d.textAlign = 'center';
+            ctx2d.textBaseline = 'middle';
+
+            const t = imgTransT;
+            const tEased = t * t * (3 - 2 * t);
+            const moveAmp = inTransition
+                ? g * (0.55 + Math.sin(tEased * Math.PI) * 1.2)
+                : g * 0.45;
+            const charSpeed = inTransition ? 18 : 4;
+
+            for (let sy = yStart; sy < yEnd; sy += g) {
+                for (let sx = xStart; sx < xEnd; sx += g) {
+                    const h1 = (sx * 73856093 ^ sy * 19349663) >>> 0;
+                    const h2 = (sx * 2654435761 ^ sy * 805459861) >>> 0;
+                    const particleRand = (h1 & 0xFFFF) / 65535;
+                    const particlePhase = (h2 & 0xFFFF) / 65535;
+                    const particleSpeed = 0.4 + particlePhase * 1.1;
+
+                    const angle1 = T * particleSpeed + particlePhase * 6.283;
+                    const angle2 = T * particleSpeed * 0.7 + particlePhase * 9.42;
+                    const angle3 = T * particleSpeed * 1.3 + particlePhase * 3.14;
+                    const dx = Math.sin(angle1) * moveAmp * 0.6 + Math.sin(angle2 + sy * 0.03) * moveAmp * 0.4;
+                    const dy = Math.cos(angle2) * moveAmp * 0.5 + Math.sin(angle3 + sx * 0.03) * moveAmp * 0.35;
+
+                    const sxD = sx + dx;
+                    const syD = sy + dy;
+
+                    const useB = imgB && (particleRand < tEased);
+
+                    let r, g2, b, inBounds;
+                    if (useB) {
+                        const bx = Math.floor((sxD - oxB) * invB);
+                        const by = Math.floor((syD - oyB) * invB);
+                        inBounds = bx >= 0 && bx < imgB.w && by >= 0 && by < imgB.h;
+                        if (inBounds) {
+                            const i4 = (by * imgB.w + bx) * 4;
+                            r = imgB.data[i4]; g2 = imgB.data[i4 + 1]; b = imgB.data[i4 + 2];
+                        }
+                    } else {
+                        const bx = Math.floor((sxD - oxA) * invA);
+                        const by = Math.floor((syD - oyA) * invA);
+                        inBounds = bx >= 0 && bx < imgA.w && by >= 0 && by < imgA.h;
+                        if (inBounds) {
+                            const i4 = (by * imgA.w + bx) * 4;
+                            r = imgA.data[i4]; g2 = imgA.data[i4 + 1]; b = imgA.data[i4 + 2];
+                        }
+                    }
+
+                    if (!inBounds) continue;
+                    if (r + g2 + b < 12) continue;
+
+                    const bright = r * 0.299 + g2 * 0.587 + b * 0.114;
+                    const cx2 = sx + halfG + dx;
+                    const cy2 = sy + halfG + dy;
+
+                    let mode;
+                    if (mDone) { mode = curM; }
+                    else {
+                        const mHash = ((sx * 73 + sy * 137) & 0xFF) * 0.00392;
+                        mode = mHash < mt ? curM : prevM;
+                    }
+
+                    if (mode === 0) {
+                        const fsz = Math.max(4, Math.floor(asciiSz * (0.4 + bright * 0.004)));
+                        const fstr = fsz + 'px Share Tech Mono, Courier New';
+                        if (fstr !== lastFont) { ctx2d.font = fstr; lastFont = fstr; }
+                        ctx2d.fillStyle = 'rgb(' + r + ',' + g2 + ',' + b + ')';
+                        const charRate = particleSpeed * charSpeed;
+                        const ci = Math.floor(
+                            (bright * 0.25 + particlePhase * chars.length + T * charRate)
+                        ) % chars.length;
+                        ctx2d.fillText(chars[(ci + chars.length) % chars.length], cx2, cy2);
+
+                    } else if (mode === 1) {
+                        const breathe = 0.75 + 0.25 * Math.sin(T * particleSpeed * 2 + particlePhase * 6.28);
+                        const d = g * (0.12 + bright * 0.0035) * breathe;
+                        ctx2d.fillStyle = 'rgb(' + r + ',' + g2 + ',' + b + ')';
+                        ctx2d.beginPath();
+                        ctx2d.arc(cx2, cy2, Math.max(0.5, d), 0, Math.PI * 2);
+                        ctx2d.fill();
+
+                    } else {
+                        const pulse = 0.8 + 0.2 * Math.sin(T * particleSpeed * 1.5 + particlePhase * 6.28);
+                        const sz = g * 0.9 * pulse;
+                        ctx2d.fillStyle = 'rgb(' + r + ',' + g2 + ',' + b + ')';
+                        ctx2d.fillRect(cx2 - sz * 0.5, cy2 - sz * 0.5, sz, sz);
+                    }
+                }
+            }
+        }
+
+        /* ═══════════════════════════════════════════════
+           UI HELPERS
+        ═══════════════════════════════════════════════ */
+        // function updateModeUI() {
+        //     document.getElementById('mode-label').textContent = modeNames[renderMode];
+        //     ['btn0', 'btn1', 'btn2'].forEach((id, i) =>
+        //         document.getElementById(id).classList.toggle('active', i === renderMode));
+        // }
+
+        function setMode(m) {
+            prevMode = renderMode; renderMode = m; modeT = 0;
+            autoMode = false;
+            document.getElementById('btn-auto').classList.remove('active');
+            // updateModeUI();
+        }
+
+        /* ═══════════════════════════════════════════════
+           INIT + EVENTS
+        ═══════════════════════════════════════════════ */
+        setup();
+    </script>
+</body>
+
+</html>
